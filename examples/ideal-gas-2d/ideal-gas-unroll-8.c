@@ -1,0 +1,107 @@
+#include "immintrin.h"
+#include<stdio.h>
+#include<stdlib.h>
+#include<math.h>
+
+extern double rtclock (void);
+
+void ideal_gas_opt (double* t_soundspeed, double* t_pressure, double* t_density, double* t_energy, int N) { 
+	double (*soundspeed)[4098] = (double (*)[4098]) t_soundspeed;
+	double (*pressure)[4098] = (double (*)[4098]) t_pressure;
+	double (*density)[4098] = (double (*)[4098]) t_density;
+	double (*energy)[4098] = (double (*)[4098]) t_energy;
+
+	int t, i, j, k;
+	double start_time, end_time;
+
+	//Cold run
+	for (t=0; t<1; t++) {
+#pragma omp parallel 
+		{
+#pragma omp for private(i)
+			for (j = 1; j < N-1; j++) {
+#pragma GCC ivdep
+#pragma clang loop vectorize (enable) interleave(enable)
+				for (i = 1; i < N-1; i++) {
+					double v=1.0/density[j][i];
+					pressure[j][i]=(1.4-1.0)*density[j][i]*energy[j][i];
+					double pressurebyenergy=(1.4-1.0)*density[j][i];
+					double pressurebyvolume=-density[j][i]*pressure[j][i];
+					double sound_speed_squared=v*v*(pressure[j][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j][i]=0.1*sqrt(sound_speed_squared);
+				}
+			}
+		}
+	}
+
+	start_time = rtclock ();
+	for (t=0; t<10; t++) {
+#pragma omp parallel 
+		{
+#pragma omp for private(i)
+			for (j = 1; j < N-1; j+=8) {
+#pragma GCC ivdep
+#pragma clang loop vectorize (enable) interleave(enable)
+				for (i = 1; i < N-1; i++) {
+					double v=1.0/density[j][i];
+					pressure[j][i]=(1.4-1.0)*density[j][i]*energy[j][i];
+					double pressurebyenergy=(1.4-1.0)*density[j][i];
+					double pressurebyvolume=-density[j][i]*pressure[j][i];
+					double sound_speed_squared=v*v*(pressure[j][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+1][i];
+					pressure[j+1][i]=(1.4-1.0)*density[j+1][i]*energy[j+1][i];
+					pressurebyenergy=(1.4-1.0)*density[j+1][i];
+					pressurebyvolume=-density[j+1][i]*pressure[j+1][i];
+					sound_speed_squared=v*v*(pressure[j+1][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+1][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+2][i];
+					pressure[j+2][i]=(1.4-1.0)*density[j+2][i]*energy[j+2][i];
+					pressurebyenergy=(1.4-1.0)*density[j+2][i];
+					pressurebyvolume=-density[j+2][i]*pressure[j+2][i];
+					sound_speed_squared=v*v*(pressure[j+2][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+2][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+3][i];
+					pressure[j+3][i]=(1.4-1.0)*density[j+3][i]*energy[j+3][i];
+					pressurebyenergy=(1.4-1.0)*density[j+3][i];
+					pressurebyvolume=-density[j+3][i]*pressure[j+3][i];
+					sound_speed_squared=v*v*(pressure[j+3][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+3][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+4][i];
+					pressure[j+4][i]=(1.4-1.0)*density[j+4][i]*energy[j+4][i];
+					pressurebyenergy=(1.4-1.0)*density[j+4][i];
+					pressurebyvolume=-density[j+4][i]*pressure[j+4][i];
+					sound_speed_squared=v*v*(pressure[j+4][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+4][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+4+1][i];
+					pressure[j+4+1][i]=(1.4-1.0)*density[j+4+1][i]*energy[j+4+1][i];
+					pressurebyenergy=(1.4-1.0)*density[j+4+1][i];
+					pressurebyvolume=-density[j+4+1][i]*pressure[j+4+1][i];
+					sound_speed_squared=v*v*(pressure[j+4+1][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+4+1][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+4+2][i];
+					pressure[j+4+2][i]=(1.4-1.0)*density[j+4+2][i]*energy[j+4+2][i];
+					pressurebyenergy=(1.4-1.0)*density[j+4+2][i];
+					pressurebyvolume=-density[j+4+2][i]*pressure[j+4+2][i];
+					sound_speed_squared=v*v*(pressure[j+4+2][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+4+2][i]=sqrt(sound_speed_squared);
+
+					v=1.0/density[j+4+3][i];
+					pressure[j+4+3][i]=(1.4-1.0)*density[j+4+3][i]*energy[j+4+3][i];
+					pressurebyenergy=(1.4-1.0)*density[j+4+3][i];
+					pressurebyvolume=-density[j+4+3][i]*pressure[j+4+3][i];
+					sound_speed_squared=v*v*(pressure[j+4+3][i]*pressurebyenergy-pressurebyvolume);
+					soundspeed[j+4+3][i]=sqrt(sound_speed_squared);
+				}
+			}
+		}
+	}
+	end_time = rtclock ();
+	printf ("unroll: %6lf\n", (double)4096*4096*12*10/(end_time - start_time)/1e9);
+}

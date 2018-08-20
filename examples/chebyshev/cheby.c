@@ -1,0 +1,95 @@
+#include "../common/common.h" 
+#include<stdio.h>
+#include<stdlib.h>
+#define EIGENVALUE 2.175
+
+extern void cheby_opt (double*, double*, double *, double *, double *, double, double, double, int);
+
+void cacheflush (void) {
+	int N = 26;
+	size_t n = 1 << N;
+	int i, t;
+	double *a = malloc(sizeof(double)*(n));
+	double sum = 0.0;
+
+	for(i=0; i<n; ++i)
+		a[i] = (i*i);
+
+	for(t=0; t<16; ++t)
+		for(i=0; i<n; ++i)
+			sum += (a[i]);
+	sum = sqrt (sum);
+}
+
+int main (void) {
+	cacheflush ();
+	int N = 514;
+	double (*Ac)[514][514] = (double (*)[514][514]) getRandom3DArray (514, 514, 514);
+	double (*Ap)[514][514] = (double (*)[514][514]) getRandom3DArray (514, 514, 514);
+	double (*RHS)[514][514] = (double (*)[514][514]) getRandom3DArray (514, 514, 514);
+	double (*Dinv)[514][514] = (double (*)[514][514]) getRandom3DArray (514, 514, 514);
+	double (*out_ref)[514][514] = (double (*)[514][514]) getZero3DArray (514, 514, 514);
+	double (*out)[514][514] = (double (*)[514][514]) getZero3DArray (514, 514, 514);
+
+	double h2inv = 0.0025;
+	double beta  = 1.0*EIGENVALUE;
+	double alpha = 0.125*beta;
+	double theta = 0.5*(beta+alpha);
+	double delta = 0.5*(beta-alpha);
+	double sigma = theta/delta;
+	double rho_n = 1/sigma;
+	double c1, c2;
+	c1 = 0.0;
+	c2 = 1/theta;
+	int t;
+	for(t=1; t<4; t++) {
+		rho_n = 1.0/(2.0*sigma + rho_n);
+		c1 += rho_n*rho_n;
+		c2 += rho_n*2.0/delta;
+	}
+
+	int i, j, k;
+	double start_time, end_time;
+
+	//Cold run
+	for (t=0; t<1; t++) {
+#pragma omp parallel 
+		{
+#pragma omp for private(j,i)
+			for (k = 1; k < N-1; k++) {
+				for (j = 1; j < N-1; j++) {
+#pragma GCC ivdep
+#pragma clang loop vectorize (enable) interleave(enable)
+					for (i = 1; i < N-1; i++) {
+						out_ref[k][j][i] = 0.1 * Ac[k][j][i] + c1 * (Ac[k][j][i] + Ap[k][j][i]) + c2 * Dinv[k][j][i] * (RHS[k][j][i] + (Ac[k][j][i] + h2inv * (0.03 * (Ac[k-1][j-1][i-1] + Ac[k-1][j-1][i+1] + Ac[k-1][j+1][i-1] + Ac[k-1][j+1][i+1] + Ac[k+1][j-1][i-1] + Ac[k+1][j-1][i+1] + Ac[k+1][j+1][i-1] + Ac[k+1][j+1][i+1]) + 0.1 * (Ac[k-1][j-1][i] + Ac[k-1][j][i-1] + Ac[k-1][j][i+1] + Ac[k-1][j+1][i] + Ac[k][j-1][i-1] + Ac[k][j-1][i+1] + Ac[k][j+1][i-1] + Ac[k][j+1][i+1] + Ac[k+1][j-1][i] + Ac[k+1][j][i-1] + Ac[k+1][j][i+1] + Ac[k+1][j+1][i]) + 0.46 * (Ac[k-1][j][i] + Ac[k][j-1][i] + Ac[k][j][i-1] + Ac[k][j][i+1] + Ac[k][j+1][i] + Ac[k+1][j][i]) + 4.26 * Ac[k][j][i])));
+					}
+				}
+			}
+		}
+	}
+
+	start_time = rtclock ();
+	for (t=0; t<5; t++) {
+#pragma omp parallel 
+		{
+#pragma omp for private(j,i)
+			for (k = 1; k < N-1; k++) {
+				for (j = 1; j < N-1; j++) {
+#pragma GCC ivdep
+#pragma clang loop vectorize (enable) interleave(enable)
+					for (i = 1; i < N-1; i++) {
+						out_ref[k][j][i] = Ac[k][j][i] + c1 * (Ac[k][j][i] + Ap[k][j][i]) + c2 * Dinv[k][j][i] * (RHS[k][j][i] + (Ac[k][j][i] + h2inv * (0.03 * (Ac[k-1][j-1][i-1] + Ac[k-1][j-1][i+1] + Ac[k-1][j+1][i-1] + Ac[k-1][j+1][i+1] + Ac[k+1][j-1][i-1] + Ac[k+1][j-1][i+1] + Ac[k+1][j+1][i-1] + Ac[k+1][j+1][i+1]) + 0.1 * (Ac[k-1][j-1][i] + Ac[k-1][j][i-1] + Ac[k-1][j][i+1] + Ac[k-1][j+1][i] + Ac[k][j-1][i-1] + Ac[k][j-1][i+1] + Ac[k][j+1][i-1] + Ac[k][j+1][i+1] + Ac[k+1][j-1][i] + Ac[k+1][j][i-1] + Ac[k+1][j][i+1] + Ac[k+1][j+1][i]) + 0.46 * (Ac[k-1][j][i] + Ac[k][j-1][i] + Ac[k][j][i-1] + Ac[k][j][i+1] + Ac[k][j+1][i] + Ac[k+1][j][i]) + 4.26 * Ac[k][j][i])));
+					}
+				}
+			}
+		}
+	}
+	end_time = rtclock ();
+	printf ("orig: %6lf\n", (double)512*512*512*39*5/(end_time - start_time)/1e9);
+
+	cheby_opt ((double*)Ac, (double*)Ap, (double*)Dinv, (double*)RHS, (double*)out, c1, c2, h2inv, N);
+
+	double error = checkError3D (N, N, 0, (double*)out, (double*)out_ref, 1, N-1, 1, N-1, 1, N-1);
+	if (error > TOLERANCE)
+		printf ("error %e\n", error);
+}
